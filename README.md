@@ -131,11 +131,35 @@ vpn-tester-cscart/
 - HTML файл отчёта
 
 **Настройка:**
-Отредактируй в `scripts/web_api.py`:
-```python
-TELEGRAM_BOT_TOKEN = 'your_bot_token'
-TELEGRAM_CHAT_ID = '-your_group_id'
-```
+
+1. Создай файл `.env` в корне проекта:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Отредактируй `.env`:
+   ```bash
+   TELEGRAM_BOT_TOKEN=1234567890:ABCdefGHIjklMNOpqrsTUVwxyz
+   TELEGRAM_CHAT_ID=-1001234567890
+   ```
+
+3. Перезапусти контейнер:
+   ```bash
+   docker compose restart
+   ```
+
+**Как получить токен:**
+- Напиши [@BotFather](https://t.me/BotFather) в Telegram
+- Создай нового бота командой `/newbot`
+- Скопируй токен
+
+**Как получить Chat ID:**
+- Добавь бота в группу
+- Напиши любое сообщение
+- Отправь боту [@userinfobot](https://t.me/userinfobot) или используй API:
+  ```bash
+  curl https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates
+  ```
 
 ---
 

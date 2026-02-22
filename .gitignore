@@ -46,3 +46,8 @@ xray.zip
 
 # Docker
 .dockerignore
+
+# Environment variables (SECRETS!)
+.env
+.env.local
+.env.*.local

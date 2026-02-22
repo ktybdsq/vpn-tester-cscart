@@ -15,32 +15,9 @@ services:
             - '27200:5000'
         environment:
             - PYTHONUNBUFFERED=1
+            - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+            - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
         restart: unless-stopped
-        networks:
-            - vpn-tester-net
-
-    # Опционально: отдельный контейнер с Xray для тестов
-    xray-runner:
-        image: alpine:latest
-        container_name: vpn-tester-runner
-        volumes:
-            - ./configs:/app/configs
-            - ./reports:/app/reports
-            - ./logs:/app/logs
-            - ./scripts:/app/scripts
-            - ./xray:/app/xray
-        working_dir: /app
-        command: >
-            sh -c "
-            apk add --no-cache python3 py3-pip curl unzip bash &&
-            pip3 install flask requests &&
-            cd /app/scripts &&
-            python3 vpn_tester.py test
-            "
-        depends_on:
-            - vpn-tester
-        profiles:
-            - test
         networks:
             - vpn-tester-net
 

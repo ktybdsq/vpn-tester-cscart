@@ -303,8 +303,8 @@ def get_status():
 
 
 # Telegram Bot Integration
-TELEGRAM_BOT_TOKEN = '8226198907'  # Токен бота
-TELEGRAM_CHAT_ID = '-1003560429587'  # ID группы
+TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')  # Токен бота
+TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')  # ID группы
 
 def get_system_info():
     """Собрать информацию о системе"""
