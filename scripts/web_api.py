@@ -228,26 +228,36 @@ def test_single():
         return jsonify({'error': 'Config not found'}), 404
 
     print(f"🔍 Testing single config: {name}...")
+    start_time = time.time()
     
     # Тестируем конфиг
     result = tester.test_config(config)
+    elapsed = time.time() - start_time
+    result['test_duration'] = round(elapsed, 2)
+    
     tester.results = [result]  # Сохраняем результат
     
     # Генерируем отчёт
     print(f"📊 Generating report for {name}...")
-    html_file, md_file = tester.generate_report()
-    
-    # Отправляем в Telegram
-    print(f"📤 Sending report to Telegram...")
     try:
-        import threading
-        telegram_thread = threading.Thread(target=send_to_telegram, args=(html_file,))
-        telegram_thread.daemon = True
-        telegram_thread.start()
+        html_file, md_file = tester.generate_report()
+        print(f"✅ Report generated: {html_file}")
+        
+        # Отправляем в Telegram
+        print(f"📤 Sending report to Telegram...")
+        try:
+            import threading
+            telegram_thread = threading.Thread(target=send_to_telegram, args=(html_file, elapsed))
+            telegram_thread.daemon = True
+            telegram_thread.start()
+        except Exception as e:
+            print(f"Telegram send error: {e}")
     except Exception as e:
-        print(f"Telegram send error: {e}")
+        print(f"❌ Report generation error: {e}")
+        import traceback
+        traceback.print_exc()
     
-    print(f"✅ Test completed for {name}: {result.get('status', 'unknown')}")
+    print(f"✅ Test completed for {name}: {result.get('status', 'unknown')} ({elapsed:.1f}s)")
     
     return jsonify(result)
 
@@ -393,7 +403,7 @@ def get_system_info():
     return info
 
 
-def send_to_telegram(report_file: Path):
+def send_to_telegram(report_file: Path, test_duration: float = 0):
     """Отправить отчет в Telegram бот"""
     import requests
 
@@ -403,6 +413,8 @@ def send_to_telegram(report_file: Path):
         # Сформировать сообщение
         message = f"""
 🔐 <b>VPN TESTER CS-CART - TEST REPORT</b>
+
+⏱️ <b>Test Duration:</b> <code>{test_duration:.1f} seconds</code>
 
 🖥️ <b>SYSTEM INFO:</b>
 • Hostname: <code>{system_info['hostname']}</code>
@@ -414,6 +426,7 @@ def send_to_telegram(report_file: Path):
 • CPU Cores: <code>{system_info['cpu_count']}</code>
 • Docker: <code>{system_info['docker_version']}</code>
 • Python: <code>{system_info['python_version']}</code>
+• DNS: <code>{system_info.get('dns_servers', 'Unknown')}</code>
 
 📊 <b>HTML Report file attached below.</b>
 
