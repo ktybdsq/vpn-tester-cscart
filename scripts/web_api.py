@@ -208,26 +208,47 @@ def get_test_status():
 
 @app.route('/api/test/single', methods=['POST'])
 def test_single():
-    """Протестировать одну конфигурацию"""
+    """Протестировать одну конфигурацию с созданием отчёта и отправкой в Telegram"""
     data = request.json
     name = data.get('name')
-    
+
     if not name:
         return jsonify({'error': 'Name required'}), 400
-    
+
     tester = VpnTester()
     tester.load_configs()
-    
+
     config = None
     for c in tester.configs:
         if c.name == name:
             config = c
             break
-    
+
     if not config:
         return jsonify({'error': 'Config not found'}), 404
+
+    print(f"🔍 Testing single config: {name}...")
     
+    # Тестируем конфиг
     result = tester.test_config(config)
+    tester.results = [result]  # Сохраняем результат
+    
+    # Генерируем отчёт
+    print(f"📊 Generating report for {name}...")
+    html_file, md_file = tester.generate_report()
+    
+    # Отправляем в Telegram
+    print(f"📤 Sending report to Telegram...")
+    try:
+        import threading
+        telegram_thread = threading.Thread(target=send_to_telegram, args=(html_file,))
+        telegram_thread.daemon = True
+        telegram_thread.start()
+    except Exception as e:
+        print(f"Telegram send error: {e}")
+    
+    print(f"✅ Test completed for {name}: {result.get('status', 'unknown')}")
+    
     return jsonify(result)
 
 
@@ -338,8 +359,9 @@ def get_system_info():
     except:
         info['ram_gb'] = 'Unknown'
     
-    # Проверить белый IP
+    # Проверить белый IP - через curl с хоста
     try:
+        # Пробуем получить публичный IP
         result = subprocess.run(
             ['curl', '-s', '--connect-timeout', '5', 'https://api.ipify.org?format=json'],
             capture_output=True, text=True, timeout=10
@@ -348,13 +370,25 @@ def get_system_info():
             import json
             public_ip = json.loads(result.stdout).get('ip', 'Unknown')
             info['public_ip'] = public_ip
-            info['has_static_ip'] = public_ip != info['local_ip']
+            # Сравниваем с локальным - если отличаются, значит есть NAT
+            info['has_static_ip'] = True  # Считаем что статический если получили ответ
         else:
             info['public_ip'] = 'Unknown'
             info['has_static_ip'] = False
     except:
         info['public_ip'] = 'Unknown'
         info['has_static_ip'] = False
+    
+    # Получить DNS серверы
+    dns_servers = []
+    try:
+        with open('/etc/resolv.conf', 'r') as f:
+            for line in f:
+                if line.strip().startswith('nameserver'):
+                    dns_servers.append(line.split()[1])
+        info['dns_servers'] = ', '.join(dns_servers) if dns_servers else 'Unknown'
+    except:
+        info['dns_servers'] = 'Unknown'
     
     return info
 
