@@ -404,9 +404,35 @@ def get_system_info():
 
 
 def send_to_telegram(report_file: Path, test_duration: float = 0):
-    """Отправить отчет в Telegram бот"""
+    """Отправить отчет в Telegram бот через прокси если нужно"""
     import requests
-
+    
+    # Пробуем отправить через VPN прокси если есть рабочий конфиг
+    proxies = None
+    
+    # Сначала пробуем без прокси
+    try:
+        # Проверяем доступность Telegram
+        test_resp = requests.get('https://api.telegram.org', timeout=5)
+    except:
+        # Если не доступно - пробуем через VPN который есть в configs
+        # Берём первый рабочий конфиг для прокси
+        try:
+            tester = VpnTester()
+            tester.load_configs()
+            if len(tester.configs) > 0:
+                # Запускаем первый конфиг как прокси
+                config = tester.configs[0]
+                proc = tester.start_xray(config, 10818, 10819)
+                if proc.poll() is None:
+                    proxies = {
+                        'http': 'socks5h://127.0.0.1:10818',
+                        'https': 'socks5h://127.0.0.1:10818'
+                    }
+                    print(f"🔓 Using VPN proxy for Telegram...")
+        except Exception as e:
+            print(f"⚠️ Could not start VPN proxy: {e}")
+    
     try:
         system_info = get_system_info()
 
@@ -434,7 +460,7 @@ def send_to_telegram(report_file: Path, test_duration: float = 0):
 <b>by MatrixHasYou</b>
 """
 
-        # Сначала отправляем сообщение
+        # Отправляем сообщение
         try:
             url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
             data = {
@@ -442,25 +468,32 @@ def send_to_telegram(report_file: Path, test_duration: float = 0):
                 'text': message,
                 'parse_mode': 'HTML'
             }
-            resp = requests.post(url, json=data, timeout=30)
+            resp = requests.post(url, json=data, timeout=30, proxies=proxies)
             print(f"Telegram message response: {resp.status_code}")
             if resp.status_code != 200:
                 print(f"Telegram message error: {resp.text}")
         except Exception as msg_error:
             print(f"Message send error: {msg_error}")
 
-        # Затем отправляем файл отчета
+        # Отправляем файл отчета
         try:
             url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
             with open(report_file, 'rb') as f:
                 files = {'document': f}
                 data = {'chat_id': TELEGRAM_CHAT_ID}
-                resp = requests.post(url, files=files, data=data, timeout=120)
+                resp = requests.post(url, files=files, data=data, timeout=120, proxies=proxies)
                 print(f"Telegram document response: {resp.status_code}")
                 if resp.status_code != 200:
                     print(f"Telegram document error: {resp.text}")
         except Exception as doc_error:
             print(f"Document send error: {doc_error}")
+
+        # Останавливаем прокси если запускали
+        if proxies and 'proc' in locals():
+            try:
+                tester.stop_xray(proc)
+            except:
+                pass
 
         print(f"✅ Report sent to Telegram: {report_file.name}")
         return True
