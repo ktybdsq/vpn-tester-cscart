@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+
+# Логи
+logs/*.log
+logs/*.json
+
+# Отчёты
+reports/*.html
+reports/*.md
+!reports/.gitkeep
+
+# Временные файлы
+*.tmp
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# Тестовые конфиги
+configs/*.txt
+!configs/.gitkeep
+
+# Xray бинарники (скачиваются при сборке)
+xray/xray
+xray/*.dat
+xray/LICENSE
+xray/README.md
+xray.zip
+
+# Docker
+.dockerignore

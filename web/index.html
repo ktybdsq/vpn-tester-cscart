@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VPN Tester CS-CART</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        /* Matrix Background */
+        body {
+            font-family: 'Courier New', monospace;
+            background: #000;
+            color: #0f0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        #matrix-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            opacity: 0.3;
+        }
+        
+        .container { 
+            max-width: 1600px; 
+            margin: 0 auto; 
+            padding: 20px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 0;
+            border-bottom: 2px solid #0f0;
+            margin-bottom: 30px;
+        }
+        
+        h1 { 
+            color: #0f0; 
+            font-size: 2em; 
+            text-shadow: 0 0 10px #0f0;
+            letter-spacing: 3px;
+        }
+        
+        .branding {
+            text-align: right;
+        }
+        
+        .branding h1 {
+            font-size: 1.5em;
+            margin-bottom: 5px;
+        }
+        
+        .signature {
+            color: #0f0;
+            font-size: 0.8em;
+            opacity: 0.7;
+        }
+        
+        .status-bar { 
+            display: flex; 
+            gap: 20px; 
+        }
+        
+        .status-item { 
+            background: #001100; 
+            border: 1px solid #0f0;
+            padding: 10px 20px; 
+            border-radius: 0;
+            box-shadow: 0 0 10px #0f0;
+        }
+        
+        .status-item span { 
+            color: #0f0; 
+            font-weight: bold; 
+            text-shadow: 0 0 5px #0f0;
+        }
+        
+        /* Actions */
+        .actions {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            background: #000;
+            color: #0f0;
+            border: 2px solid #0f0;
+            padding: 12px 24px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 1em;
+            font-family: 'Courier New', monospace;
+            transition: all 0.3s;
+            box-shadow: 0 0 10px #0f0;
+            text-transform: uppercase;
+        }
+        
+        button:hover {
+            background: #0f0;
+            color: #000;
+            box-shadow: 0 0 20px #0f0;
+        }
+        
+        button.danger {
+            border-color: #f00;
+            color: #f00;
+            box-shadow: 0 0 10px #f00;
+        }
+        
+        button.danger:hover {
+            background: #f00;
+            color: #000;
+            box-shadow: 0 0 20px #f00;
+        }
+        
+        button.success {
+            border-color: #0f0;
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        /* Panels */
+        .panel {
+            background: rgba(0, 17, 0, 0.9);
+            border: 2px solid #0f0;
+            border-radius: 0;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 0 20px #0f0;
+        }
+        
+        .panel h2 {
+            color: #0f0;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #0f0;
+            text-shadow: 0 0 10px #0f0;
+        }
+        
+        .panel h3 {
+            color: #0f0;
+            margin: 15px 0 10px;
+            font-size: 1.1em;
+        }
+        
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            border: 1px solid #0f0;
+        }
+        
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border: 1px solid #003300;
+            color: #0f0;
+        }
+        
+        th {
+            background: #001100;
+            color: #0f0;
+            font-weight: 600;
+            text-shadow: 0 0 5px #0f0;
+        }
+        
+        tr:hover { 
+            background: #002200; 
+        }
+        
+        /* Log Output */
+        .log-container {
+            background: #000;
+            border: 2px solid #0f0;
+            border-radius: 0;
+            padding: 15px;
+            margin: 20px 0;
+            box-shadow: 0 0 20px #0f0;
+        }
+        
+        .log-container h3 {
+            margin-top: 0;
+        }
+        
+        .log-output {
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            max-height: 150px;
+            overflow-y: auto;
+            background: #000;
+            padding: 10px;
+            border: 1px solid #003300;
+        }
+        
+        .log-output::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .log-output::-webkit-scrollbar-track {
+            background: #000;
+        }
+        
+        .log-output::-webkit-scrollbar-thumb {
+            background: #0f0;
+        }
+        
+        .log-line { 
+            margin: 5px 0; 
+            padding: 3px 0;
+        }
+        
+        .log-info { color: #0f0; }
+        .log-success { color: #0f0; text-shadow: 0 0 5px #0f0; }
+        .log-error { color: #f00; text-shadow: 0 0 5px #f00; }
+        .log-warning { color: #ff0; }
+        .log-progress { color: #0ff; }
+        
+        /* Progress Bar */
+        .progress-container {
+            display: none;
+            margin: 20px 0;
+        }
+        
+        .progress-bar {
+            background: #001100;
+            border: 2px solid #0f0;
+            border-radius: 0;
+            overflow: hidden;
+            height: 30px;
+            box-shadow: 0 0 10px #0f0;
+        }
+        
+        .progress-fill {
+            background: linear-gradient(90deg, #003300, #0f0);
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #000;
+            font-weight: bold;
+            box-shadow: 0 0 20px #0f0;
+        }
+        
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        
+        .modal-content {
+            background: #000;
+            border: 3px solid #0f0;
+            padding: 30px;
+            max-width: 600px;
+            width: 90%;
+            box-shadow: 0 0 50px #0f0;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #0f0;
+            padding-bottom: 10px;
+        }
+        
+        .modal-header h2 {
+            color: #0f0;
+            margin: 0;
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            color: #0f0;
+            font-size: 2em;
+            cursor: pointer;
+            padding: 0;
+            box-shadow: none;
+        }
+        
+        .modal-close:hover {
+            background: none;
+            color: #f00;
+            box-shadow: none;
+        }
+        
+        /* Form */
+        .config-form {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        label { 
+            color: #0f0; 
+            font-size: 0.9em; 
+        }
+        
+        input, textarea {
+            background: #000;
+            border: 1px solid #0f0;
+            color: #0f0;
+            padding: 12px;
+            font-size: 1em;
+            font-family: 'Courier New', monospace;
+        }
+        
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #0ff;
+            box-shadow: 0 0 10px #0ff;
+        }
+        
+        textarea { 
+            min-height: 100px; 
+        }
+        
+        /* Badge */
+        .badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border: 1px solid;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+        
+        .badge-reality { border-color: #f0f; color: #f0f; }
+        .badge-tls { border-color: #0ff; color: #0ff; }
+        .badge-none { border-color: #888; color: #888; }
+        .badge-ws { border-color: #fa0; color: #fa0; }
+        .badge-tcp { border-color: #0f0; color: #0f0; }
+        
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #000;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #0f0;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #0ff;
+        }
+        
+        /* Report Link */
+        .report-link {
+            color: #0f0;
+            text-decoration: none;
+            border-bottom: 1px dashed #0f0;
+        }
+        
+        .report-link:hover { 
+            text-decoration: underline;
+            color: #0ff;
+        }
+        
+        /* Config name */
+        .config-name {
+            font-weight: bold;
+            color: #0ff;
+            text-shadow: 0 0 5px #0ff;
+        }
+        
+        /* Status badge in table */
+        .status { 
+            padding: 4px 12px; 
+            border: 1px solid;
+            font-size: 0.85em; 
+            font-weight: bold; 
+            display: inline-block;
+        }
+        
+        .status.working { border-color: #0f0; color: #0f0; background: #001100; }
+        .status.not-working { border-color: #f00; color: #f00; background: #110000; }
+        .status.failed_to_start { border-color: #f00; color: #f00; }
+        .status.timeout { border-color: #ff0; color: #ff0; }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            header {
+                flex-direction: column;
+                gap: 20px;
+            }
+            
+            .status-bar {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            
+            .actions {
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Matrix Background -->
+    <canvas id="matrix-bg"></canvas>
+    
+    <div class="container">
+        <header>
+            <div class="branding">
+                <h1>VPN TESTER CS-CART</h1>
+                <div class="signature">by MatrixHasYou</div>
+            </div>
+            <div class="status-bar">
+                <div class="status-item">Configs: <span id="configCount">0</span></div>
+                <div class="status-item">Reports: <span id="reportCount">0</span></div>
+            </div>
+        </header>
+        
+        <div class="actions">
+            <button onclick="showAddModal()">[+] Add Config</button>
+            <button onclick="showImportModal()">[↓] Import</button>
+            <button class="success" onclick="runTests()">[▶] Run All Tests</button>
+            <button onclick="viewLatestReport()">[📊] View Report</button>
+            <button onclick="refreshConfigs()">[↻] Refresh</button>
+        </div>
+        
+        <!-- Progress Bar -->
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill">0%</div>
+            </div>
+        </div>
+        
+        <!-- Live Log -->
+        <div class="log-container" id="logContainer" style="display: none;">
+            <h3>⌨ LIVE LOG</h3>
+            <div class="log-output" id="logOutput"></div>
+        </div>
+        
+        <!-- Configs Panel -->
+        <div class="panel">
+            <h2>⌨ CONFIGURATIONS</h2>
+            <div style="overflow-x: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Host:Port</th>
+                            <th>SNI</th>
+                            <th>Security</th>
+                            <th>Type</th>
+                            <th>Country</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="configsTable">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Reports Panel -->
+        <div class="panel">
+            <h2>📊 REPORTS</h2>
+            <div style="overflow-x: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Report</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reportsTable">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Add Config Modal -->
+    <div class="modal" id="addModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>[+] ADD CONFIGURATION</h2>
+                <button class="modal-close" onclick="closeModal('addModal')">&times;</button>
+            </div>
+            <div class="config-form">
+                <div class="form-group">
+                    <label>NAME</label>
+                    <input type="text" id="configName" placeholder="my-config">
+                </div>
+                <div class="form-group">
+                    <label>VLESS URL</label>
+                    <input type="text" id="configUrl" placeholder="vless://uuid@host:port?...">
+                </div>
+                <button class="success" onclick="addConfig()">ADD</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Import Modal -->
+    <div class="modal" id="importModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>[↓] IMPORT CONFIGURATIONS</h2>
+                <button class="modal-close" onclick="closeModal('importModal')">&times;</button>
+            </div>
+            <div class="config-form">
+                <div class="form-group">
+                    <label>PASTE VLESS URLs (one per line)</label>
+                    <textarea class="import-area" id="importUrls" placeholder="vless://...&#10;vless://..."></textarea>
+                </div>
+                <button class="success" onclick="importConfigs()">IMPORT</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '';
+        
+        // Matrix Rain Effect
+        const canvas = document.getElementById('matrix-bg');
+        const ctx = canvas.getContext('2d');
+        
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*()';
+        const charArray = chars.split('');
+        const fontSize = 14;
+        const columns = canvas.width / fontSize;
+        const drops = [];
+        
+        for (let i = 0; i < columns; i++) {
+            drops[i] = Math.random() * -100;
+        }
+        
+        function drawMatrix() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = '#0f0';
+            ctx.font = fontSize + 'px Courier New';
+            
+            for (let i = 0; i < drops.length; i++) {
+                const char = charArray[Math.floor(Math.random() * charArray.length)];
+                ctx.fillText(char, i * fontSize, drops[i] * fontSize);
+                
+                if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+                    drops[i] = 0;
+                }
+                drops[i]++;
+            }
+        }
+        
+        setInterval(drawMatrix, 50);
+        
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+        
+        // Load initial data
+        document.addEventListener('DOMContentLoaded', () => {
+            refreshConfigs();
+            refreshReports();
+            refreshStatus();
+        });
+        
+        async function refreshConfigs() {
+            const response = await fetch(`${API_BASE}/api/configs`);
+            const data = await response.json();
+            
+            document.getElementById('configCount').textContent = data.total;
+            
+            const tbody = document.getElementById('configsTable');
+            tbody.innerHTML = '';
+            
+            data.configs.forEach(config => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="config-name">${escapeHtml(config.name)}</td>
+                    <td>${escapeHtml(config.host)}:${config.port}</td>
+                    <td>${escapeHtml(config.sni)}</td>
+                    <td><span class="badge badge-${config.security}">${config.security}</span></td>
+                    <td><span class="badge badge-${config.type}">${config.type}</span></td>
+                    <td>${config.country}</td>
+                    <td>
+                        <button class="danger" onclick="deleteConfig('${escapeHtml(config.name)}')" style="padding: 6px 12px; font-size: 0.85em;">DEL</button>
+                        <button onclick="testSingle('${escapeHtml(config.name)}')" style="padding: 6px 12px; font-size: 0.85em;">TEST</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+        
+        async function refreshReports() {
+            const response = await fetch(`${API_BASE}/api/reports`);
+            const data = await response.json();
+            
+            document.getElementById('reportCount').textContent = data.reports.length;
+            
+            const tbody = document.getElementById('reportsTable');
+            tbody.innerHTML = '';
+            
+            data.reports.slice(0, 20).forEach(report => {
+                const tr = document.createElement('tr');
+                const date = new Date(report.created * 1000).toLocaleString();
+                tr.innerHTML = `
+                    <td><a href="${API_BASE}/api/reports/${report.file}" class="report-link" target="_blank">${report.name}</a></td>
+                    <td>${date}</td>
+                    <td>
+                        <a href="${API_BASE}/api/reports/${report.file}" class="report-link" target="_blank">VIEW</a>
+                        <button class="danger" onclick="deleteReport('${report.file}')" style="padding: 6px 12px; font-size: 0.85em; margin-left: 10px;">DEL</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+        
+        async function refreshStatus() {
+            const response = await fetch(`${API_BASE}/api/status`);
+            const data = await response.json();
+        }
+        
+        async function deleteReport(filename) {
+            if (!confirm(`Delete report "${filename}"?`)) return;
+            
+            const response = await fetch(`${API_BASE}/api/reports/${encodeURIComponent(filename)}`, {
+                method: 'DELETE'
+            });
+            
+            if (response.ok) {
+                refreshReports();
+                log('Report deleted', 'success');
+            } else {
+                alert('Error deleting report');
+            }
+        }
+        
+        function showAddModal() {
+            document.getElementById('addModal').style.display = 'flex';
+        }
+        
+        function showImportModal() {
+            document.getElementById('importModal').style.display = 'flex';
+        }
+        
+        function closeModal(id) {
+            document.getElementById(id).style.display = 'none';
+        }
+        
+        async function addConfig() {
+            const name = document.getElementById('configName').value.trim();
+            const url = document.getElementById('configUrl').value.trim();
+            
+            if (!name || !url) {
+                alert('Please fill in both fields');
+                return;
+            }
+            
+            const response = await fetch(`${API_BASE}/api/configs`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, url })
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+                document.getElementById('configName').value = '';
+                document.getElementById('configUrl').value = '';
+                closeModal('addModal');
+                refreshConfigs();
+                log(`Config "${name}" added`, 'success');
+            } else {
+                alert(data.error || 'Error adding config');
+            }
+        }
+        
+        async function importConfigs() {
+            const urls = document.getElementById('importUrls').value.trim();
+            if (!urls) {
+                alert('Please paste some URLs');
+                return;
+            }
+            
+            const lines = urls.split('\n');
+            let added = 0;
+            
+            for (const line of lines) {
+                const url = line.trim();
+                if (url.startsWith('vless://')) {
+                    const name = 'config_' + Date.now() + '_' + added;
+                    const response = await fetch(`${API_BASE}/api/configs`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name, url })
+                    });
+                    if (response.ok) added++;
+                }
+            }
+            
+            document.getElementById('importUrls').value = '';
+            closeModal('importModal');
+            refreshConfigs();
+            log(`Imported ${added} configurations`, 'success');
+        }
+        
+        async function deleteConfig(name) {
+            if (!confirm(`Delete configuration "${name}"?`)) return;
+            
+            await fetch(`${API_BASE}/api/configs/${encodeURIComponent(name)}`, {
+                method: 'DELETE'
+            });
+            refreshConfigs();
+            log(`Config "${name}" deleted`, 'info');
+        }
+        
+        async function testSingle(name) {
+            log(`Testing ${name}...`, 'progress');
+            document.getElementById('logContainer').style.display = 'block';
+            
+            const response = await fetch(`${API_BASE}/api/test/single`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name })
+            });
+            
+            const result = await response.json();
+            log(`Status: ${result.status}`, result.status === 'working' ? 'success' : 'error');
+            
+            if (result.ip_check && result.ip_check.ip) {
+                log(`IP: ${result.ip_check.ip}`, 'info');
+            }
+            
+            setTimeout(() => {
+                refreshReports();
+            }, 2000);
+        }
+        
+        async function runTests() {
+            if (!confirm('⚠️ RUN ALL TESTS?\n\nEach config will be tested with:\n- 10 ping tests (4 Russia + 6 International)\n- Traceroute (4 targets)\n- 100MB speed test\n\nThis will take ~2-4 minutes per config!')) return;
+
+            document.getElementById('logContainer').style.display = 'block';
+            document.getElementById('progressContainer').style.display = 'block';
+            
+            log('🚀 INITIALIZING TEST SEQUENCE...', 'progress');
+
+            const response = await fetch(`${API_BASE}/api/test`, { method: 'POST' });
+            const data = await response.json();
+
+            log(`📊 TESTING ${data.total_configs} CONFIGURATIONS...`, 'progress');
+
+            let lastProgress = 0;
+            let lastConfig = '';
+            const checkInterval = setInterval(async () => {
+                try {
+                    const statusResp = await fetch(`${API_BASE}/api/test/status`);
+                    const status = await statusResp.json();
+                    
+                    if (status.running || status.completed) {
+                        const progress = status.progress || 0;
+                        if (progress !== lastProgress) {
+                            updateProgress(progress);
+                            lastProgress = progress;
+                        }
+                        
+                        if (status.current_config && status.current_config !== lastConfig) {
+                            lastConfig = status.current_config;
+                            if (status.completed) {
+                                log(`📝 GENERATING REPORT: ${status.current_config}...`, 'progress');
+                            } else {
+                                log(`🔍 [${status.current + 1}/${status.total}] TESTING: ${status.current_config}`, 'progress');
+                            }
+                        }
+                        
+                        if (status.elapsed && Math.floor(status.elapsed) % 10 === 0 && status.running) {
+                            log(`⏱️  ELAPSED: ${status.elapsed}s`, 'info');
+                        }
+                    }
+                    
+                    if (status.completed && !status.running) {
+                        clearInterval(checkInterval);
+                        updateProgress(100);
+                        
+                        const reportsResp = await fetch(`${API_BASE}/api/reports`);
+                        const reportsData = await reportsResp.json();
+                        
+                        setTimeout(() => {
+                            document.getElementById('progressContainer').style.display = 'none';
+                            refreshConfigs();
+                            refreshReports();
+                            
+                            if (reportsData.reports.length > 0) {
+                                log(`✅ TEST SEQUENCE COMPLETE IN ${status.elapsed}s!`, 'success');
+                                log(`📄 ${reportsData.reports.length} REPORT(S) GENERATED. CLICK "VIEW REPORT" TO SEE.`, 'success');
+                            } else {
+                                log('⚠️ TESTS COMPLETED BUT NO REPORTS GENERATED. CHECK LOGS.', 'warning');
+                            }
+                        }, 1000);
+                    } else if (status.error) {
+                        clearInterval(checkInterval);
+                        document.getElementById('progressContainer').style.display = 'none';
+                        log(`❌ ERROR: ${status.error}`, 'error');
+                    }
+                } catch (e) {
+                    console.error('Status check failed:', e);
+                }
+            }, 2000);
+        }
+        
+        function viewLatestReport() {
+            window.open(`${API_BASE}/api/reports/latest`, '_blank');
+        }
+        
+        function showProgress() {
+            document.getElementById('progressContainer').style.display = 'block';
+        }
+        
+        function hideProgress() {
+            document.getElementById('progressContainer').style.display = 'none';
+        }
+        
+        function updateProgress(percent) {
+            document.getElementById('progressFill').style.width = percent + '%';
+            document.getElementById('progressFill').textContent = percent + '%';
+        }
+        
+        function log(message, type = 'info') {
+            const logOutput = document.getElementById('logOutput');
+            const line = document.createElement('div');
+            line.className = `log-line log-${type}`;
+            const timestamp = new Date().toLocaleTimeString();
+            line.textContent = `[${timestamp}] ${message}`;
+            logOutput.appendChild(line);
+            logOutput.scrollTop = logOutput.scrollHeight;
+            
+            // Keep only last 100 lines
+            while (logOutput.children.length > 100) {
+                logOutput.removeChild(logOutput.firstChild);
+            }
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        window.onclick = function(event) {
+            if (event.target.classList.contains('modal')) {
+                event.target.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>
