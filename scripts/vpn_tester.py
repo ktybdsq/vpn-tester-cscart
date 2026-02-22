@@ -44,10 +44,9 @@ TEST_SERVERS = [
     ("Amazon", "amazon.com", 443, "US"),
 ]
 
-# URL для проверки скорости (100MB файлы)
+# URL для проверки скорости (10MB файлы - быстрее для тестов)
 SPEEDTEST_URLS = [
-    "https://proof.ovh.net/files/100Mb.dat",  # OVH 100MB
-    "https://speedtest.net/garbage/garbage.php?ck=100",  # Speedtest 100MB
+    "https://proof.ovh.net/files/10Mb.dat",  # OVH 10MB
     "https://download.oracle.com/otn-pub/java/jdk/10.0.2+13/19aef61b38124481863b1413dce18555/0",  # Oracle
 ]
 
@@ -442,7 +441,7 @@ class VpnTester:
         return results
 
     def test_speed(self, http_port: int) -> dict:
-        """Тест скорости скачивания (100MB файл)"""
+        """Тест скорости скачивания (10MB файл)"""
         proxy = f"http://127.0.0.1:{http_port}"
         results = {}
 
@@ -450,19 +449,18 @@ class VpnTester:
         for url in SPEEDTEST_URLS[:1]:
             try:
                 start = time.time()
-                # Скачиваем с прогрессом - curl будет показывать скорость даже если не докачал
+                # Скачиваем с прогрессом
                 result = subprocess.run(
                     ['curl', '-s', '-L', '-o', '/dev/null', 
                      '-w', '%{size_download},%{speed_download},%{time_total},%{http_code}',
                      '--proxy', proxy, 
-                     '--connect-timeout', '20', 
-                     '--speed-time', '30',  # Если скорость 0 более 30 сек - прервать
+                     '--connect-timeout', '15', 
+                     '--speed-time', '20',  # Если скорость 0 более 20 сек - прервать
                      '--speed-limit', '1000',  # Минимум 1KB/s
-                     '--max-time', '120',  # Максимум 2 минуты
-                     '--limit-rate', '50M',  # Ограничим чтобы не зависало
+                     '--max-time', '60',  # Максимум 1 минута для 10MB
                      url],
                     capture_output=True, 
-                    timeout=150
+                    timeout=90
                 )
                 elapsed = time.time() - start
 
@@ -499,7 +497,7 @@ class VpnTester:
                         'http_code': '000'
                     }
             except subprocess.TimeoutExpired:
-                results[url] = {'status': 'timeout', 'error': 'Timeout after 120s'}
+                results[url] = {'status': 'timeout', 'error': 'Timeout after 60s'}
             except Exception as e:
                 results[url] = {'status': 'error', 'error': str(e)}
 
