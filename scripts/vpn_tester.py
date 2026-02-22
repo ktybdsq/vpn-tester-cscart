@@ -373,7 +373,7 @@ class VpnTester:
         """Тест трассировки до ключевых серверов (выборочно) - БЕЗ прокси"""
         results = {}
         
-        # Выбираем по 2 сервера из каждого региона для трассировки
+        # Выбираем 4 сервера для трассировки
         targets = [
             ("Yandex RU", "yandex.ru"),
             ("Office SMTK", "office.smtk.us"),
@@ -383,23 +383,28 @@ class VpnTester:
         
         for name, host in targets:
             try:
-                # Запускаем traceroute с таймаутом (без прокси!)
+                # Запускаем traceroute с таймаутом
                 result = subprocess.run(
-                    ['traceroute', '-m', '15', '-w', '2', '-q', '1', host],
+                    ['traceroute', '-m', '20', '-w', '2', '-q', '1', host],
                     capture_output=True,
                     text=True,
-                    timeout=20
+                    timeout=45
                 )
                 
                 # Парсим вывод traceroute
                 hops = []
-                for line in result.stdout.split('\n')[1:]:  # Пропускаем заголовок
+                reached_destination = False
+                
+                for line in result.stdout.split('\n')[1:]:
                     if line.strip() and not line.startswith('traceroute'):
                         parts = line.split()
                         if len(parts) >= 2:
-                            # Извлекаем хост (может быть в скобках)
                             host_str = parts[-1] if len(parts) > 2 else '*'
                             time_str = parts[1].rstrip('ms') if len(parts) > 1 else '*'
+                            
+                            # Проверяем, дошли ли до цели
+                            if host in host_str or host_str == host:
+                                reached_destination = True
                             
                             hop_info = {
                                 'hop': parts[0].rstrip('*'),
@@ -408,19 +413,31 @@ class VpnTester:
                             }
                             hops.append(hop_info)
                 
+                # Определяем статус
+                if reached_destination:
+                    status = 'ok'
+                    status_text = '✅ REACHED'
+                elif len(hops) >= 3:
+                    status = 'partial'
+                    status_text = '⚠️ PARTIAL'
+                else:
+                    status = 'fail'
+                    status_text = '❌ FAILED'
+                
                 results[name] = {
-                    'status': 'ok' if len(hops) >= 2 else 'partial',
-                    'hops': hops[:12],  # Первые 12 хопов
+                    'status': status,
+                    'status_text': status_text,
+                    'reached': reached_destination,
                     'hops_count': len(hops),
-                    'target': host
+                    'target': host,
+                    'hops': hops[:5] if reached_destination else hops  # Только первые 5 хопов для отчёта
                 }
             except subprocess.TimeoutExpired:
-                results[name] = {'status': 'timeout', 'hops': [], 'hops_count': 0, 'target': host}
+                results[name] = {'status': 'timeout', 'status_text': '⏱️ TIMEOUT', 'reached': False, 'hops': [], 'hops_count': 0, 'target': host}
             except FileNotFoundError:
-                # traceroute не установлен
-                results[name] = {'status': 'not_installed', 'hops': [], 'hops_count': 0, 'target': host}
+                results[name] = {'status': 'error', 'status_text': '❌ NO TRACEROUTE', 'reached': False, 'hops': [], 'hops_count': 0, 'target': host}
             except Exception as e:
-                results[name] = {'status': 'error', 'error': str(e), 'hops': [], 'hops_count': 0, 'target': host}
+                results[name] = {'status': 'error', 'status_text': f'❌ ERROR', 'reached': False, 'error': str(e), 'hops': [], 'hops_count': 0, 'target': host}
 
         return results
 
@@ -503,6 +520,88 @@ class VpnTester:
             return {'status': 'fail'}
         except Exception as e:
             return {'status': 'error', 'error': str(e)}
+
+    def test_dns(self) -> dict:
+        """Проверка DNS серверов - определяет использует ли провайдер свои DNS"""
+        results = {
+            'local_dns': [],
+            'uses_provider_dns': False,
+            'recommendation': ''
+        }
+        
+        try:
+            # Получаем текущие DNS через nmcli (если есть)
+            try:
+                result = subprocess.run(
+                    ['nmcli', 'dev', 'show'],
+                    capture_output=True, text=True, timeout=10
+                )
+                if result.returncode == 0:
+                    for line in result.stdout.split('\n'):
+                        if 'IP4.DNS' in line:
+                            dns = line.split(':')[1].strip()
+                            if dns and dns not in results['local_dns']:
+                                results['local_dns'].append(dns)
+            except:
+                pass
+            
+            # Если не нашли через nmcli, пробуем через resolvectl
+            if not results['local_dns']:
+                try:
+                    result = subprocess.run(
+                        ['resolvectl', 'status'],
+                        capture_output=True, text=True, timeout=10
+                    )
+                    if result.returncode == 0:
+                        for line in result.stdout.split('\n'):
+                            if 'DNS Servers:' in line:
+                                dns_list = line.split(':')[1].strip().split()
+                                results['local_dns'].extend(dns_list)
+                except:
+                    pass
+            
+            # Если всё ещё не нашли, пробуем /etc/resolv.conf
+            if not results['local_dns']:
+                try:
+                    with open('/etc/resolv.conf', 'r') as f:
+                        for line in f:
+                            if line.strip().startswith('nameserver'):
+                                dns = line.split()[1]
+                                results['local_dns'].append(dns)
+                except:
+                    pass
+            
+            # Проверяем, являются ли DNS публичными
+            public_dns = ['8.8.8.8', '8.8.4.4', '1.1.1.1', '1.0.0.1', '9.9.9.9', '208.67.222.222']
+            provider_dns_patterns = ['192.168.', '10.', '172.16.', '172.17.', '172.18.', '172.19.', 
+                                     '172.20.', '172.21.', '172.22.', '172.23.', '172.24.', '172.25.',
+                                     '172.26.', '172.27.', '172.28.', '172.29.', '172.30.', '172.31.']
+            
+            uses_public = False
+            uses_provider = False
+            
+            for dns in results['local_dns']:
+                if any(public in dns for public in public_dns):
+                    uses_public = True
+                if any(pattern in dns for pattern in provider_dns_patterns):
+                    uses_provider = True
+            
+            results['uses_provider_dns'] = uses_provider and not uses_public
+            results['uses_public_dns'] = uses_public
+            
+            # Формируем рекомендацию
+            if results['uses_provider_dns']:
+                results['recommendation'] = '⚠️ WARNING: Using provider DNS (possible censorship). Recommend changing to 8.8.8.8 or 1.1.1.1'
+            elif uses_public:
+                results['recommendation'] = '✅ OK: Using public DNS (Google/Cloudflare)'
+            else:
+                results['recommendation'] = 'ℹ️ INFO: Using local/network DNS'
+                
+        except Exception as e:
+            results['error'] = str(e)
+            results['recommendation'] = '❌ ERROR: Could not detect DNS'
+        
+        return results
     
     def test_config(self, config: VlessConfig) -> dict:
         """Полное тестирование конфигурации"""
@@ -532,6 +631,9 @@ class VpnTester:
         try:
             # Тест IP
             result['ip_check'] = self.test_ip(http_port)
+
+            # Проверка DNS (без прокси - локальные DNS)
+            result['dns_check'] = self.test_dns()
 
             # Тест пингов (10 серверов)
             result['ping'] = self.test_ping(http_port)
@@ -767,39 +869,76 @@ class VpnTester:
         </div>
 """
 
-        # Traceroute details
+        # Traceroute details - упрощённо
         if working:
             html += """
-        <h2>🛤️ TRACEROUTE (SAMPLE)</h2>
+        <h2>🛤️ TRACEROUTE STATUS</h2>
+        <div class="scroll-table">
+        <table>
+            <thead>
+                <tr>
+                    <th>Config</th>
+                    <th>Yandex RU</th>
+                    <th>Office SMTK</th>
+                    <th>Google</th>
+                    <th>GitHub</th>
+                </tr>
+            </thead>
+            <tbody>
 """
             for r in working:
                 trace = r.get('traceroute', {})
                 if trace:
-                    html += f"""
-        <h3>{r.get('name', 'Unknown')}</h3>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px;">
+                    yandex = trace.get('Yandex RU', {}).get('status_text', '❓')
+                    office = trace.get('Office SMTK', {}).get('status_text', '❓')
+                    google = trace.get('Google', {}).get('status_text', '❓')
+                    github = trace.get('GitHub', {}).get('status_text', '❓')
+                    
+                    html += f"""                <tr>
+                    <td class="config-name">{r.get('name', 'Unknown')}</td>
+                    <td>{yandex}</td>
+                    <td>{office}</td>
+                    <td>{google}</td>
+                    <td>{github}</td>
+                </tr>
 """
-                    for target, data in trace.items():
-                        html += f"""
-            <div>
-                <div class="region-header">{target} ({data.get('hops_count', 0)} hops)</div>
-                <div class="traceroute">
+            html += """            </tbody>
+        </table>
+        </div>
 """
-                        for hop in data.get('hops', [])[:8]:
-                            hop_num = hop.get('hop', '*')
-                            host = hop.get('host', '*')
-                            time_val = hop.get('time', '*')
-                            hop_class = 'success' if host != '*' and host != '*' else 'fail'
-                            html += f"""                    <div class="traceroute-hop {hop_class}">{hop_num:>2}. {host:<25} {time_val}ms</div>
+
+        # DNS Check details
+        if working:
+            html += """
+        <h2>🌐 DNS CHECK</h2>
+        <div class="scroll-table">
+        <table>
+            <thead>
+                <tr>
+                    <th>Config</th>
+                    <th>Local DNS</th>
+                    <th>Status</th>
+                    <th>Recommendation</th>
+                </tr>
+            </thead>
+            <tbody>
 """
-                        if not data.get('hops'):
-                            html += """                    <div class="traceroute-hop fail">No data</div>
+            for r in working:
+                dns = r.get('dns_check', {})
+                dns_servers = ', '.join(dns.get('local_dns', ['Unknown']))
+                status = '⚠️ PROVIDER DNS' if dns.get('uses_provider_dns') else ('✅ PUBLIC DNS' if dns.get('uses_public_dns') else 'ℹ️ LOCAL DNS')
+                status_class = 'speed-slow' if dns.get('uses_provider_dns') else 'speed'
+                recommendation = dns.get('recommendation', '')
+                
+                html += f"""                <tr>
+                    <td class="config-name">{r.get('name', 'Unknown')}</td>
+                    <td>{dns_servers}</td>
+                    <td class="{status_class}">{status}</td>
+                    <td style="font-size: 0.8em; opacity: 0.9;">{recommendation}</td>
+                </tr>
 """
-                        html += """
-                </div>
-            </div>
-"""
-                    html += """
+            html += """            </tbody>
+        </table>
         </div>
 """
 

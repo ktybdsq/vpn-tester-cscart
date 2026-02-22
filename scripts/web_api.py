@@ -362,51 +362,66 @@ def get_system_info():
 def send_to_telegram(report_file: Path):
     """Отправить отчет в Telegram бот"""
     import requests
-    
+
     try:
         system_info = get_system_info()
-        
+
         # Сформировать сообщение
         message = f"""
-🔐 VPN TESTER CS-CART - TEST REPORT
+🔐 <b>VPN TESTER CS-CART - TEST REPORT</b>
 
-🖥️ SYSTEM INFO:
-• Hostname: {system_info['hostname']}
-• Local IP: {system_info['local_ip']}
-• Public IP: {system_info['public_ip']}
+🖥️ <b>SYSTEM INFO:</b>
+• Hostname: <code>{system_info['hostname']}</code>
+• Local IP: <code>{system_info['local_ip']}</code>
+• Public IP: <code>{system_info['public_ip']}</code>
 • Static IP: {'✅ Yes' if system_info['has_static_ip'] else '❌ No'}
-• OS: {system_info['os']}
-• RAM: {system_info['ram_gb']} GB
-• CPU Cores: {system_info['cpu_count']}
-• Docker: {system_info['docker_version']}
-• Python: {system_info['python_version']}
+• OS: <code>{system_info['os']}</code>
+• RAM: <code>{system_info['ram_gb']} GB</code>
+• CPU Cores: <code>{system_info['cpu_count']}</code>
+• Docker: <code>{system_info['docker_version']}</code>
+• Python: <code>{system_info['python_version']}</code>
 
-📊 Report file attached below.
+📊 <b>HTML Report file attached below.</b>
+
 ━━━━━━━━━━━━━━━━━━━━
-by MatrixHasYou
+<b>by MatrixHasYou</b>
 """
-        
-        # Отправить сообщение
-        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-        data = {
-            'chat_id': TELEGRAM_CHAT_ID,
-            'text': message,
-            'parse_mode': 'HTML'
-        }
-        requests.post(url, json=data, timeout=30)
-        
-        # Отправить файл отчета
-        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
-        with open(report_file, 'rb') as f:
-            files = {'document': f}
-            data = {'chat_id': TELEGRAM_CHAT_ID}
-            requests.post(url, files=files, data=data, timeout=60)
-        
+
+        # Сначала отправляем сообщение
+        try:
+            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+            data = {
+                'chat_id': TELEGRAM_CHAT_ID,
+                'text': message,
+                'parse_mode': 'HTML'
+            }
+            resp = requests.post(url, json=data, timeout=30)
+            print(f"Telegram message response: {resp.status_code}")
+            if resp.status_code != 200:
+                print(f"Telegram message error: {resp.text}")
+        except Exception as msg_error:
+            print(f"Message send error: {msg_error}")
+
+        # Затем отправляем файл отчета
+        try:
+            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
+            with open(report_file, 'rb') as f:
+                files = {'document': f}
+                data = {'chat_id': TELEGRAM_CHAT_ID}
+                resp = requests.post(url, files=files, data=data, timeout=120)
+                print(f"Telegram document response: {resp.status_code}")
+                if resp.status_code != 200:
+                    print(f"Telegram document error: {resp.text}")
+        except Exception as doc_error:
+            print(f"Document send error: {doc_error}")
+
         print(f"✅ Report sent to Telegram: {report_file.name}")
         return True
-        
+
     except Exception as e:
         print(f"❌ Telegram error: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
