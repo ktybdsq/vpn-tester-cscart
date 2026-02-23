@@ -17,6 +17,10 @@ services:
             - PYTHONUNBUFFERED=1
             - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
             - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+            # Разрешаем доступ к хосту
+            - EXTRA_HOSTS=host.docker.internal:host-gateway
+        extra_hosts:
+            - "host.docker.internal:host-gateway"
         restart: unless-stopped
         networks:
             - vpn-tester-net

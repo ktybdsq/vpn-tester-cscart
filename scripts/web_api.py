@@ -334,8 +334,10 @@ def get_status():
 
 
 # Telegram Bot Integration
-TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '8226198907:AAH90LMOPnHDRo65uAmfltAo8PmTIml5-NQ')  # Токен бота
-TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '-1003560429587')  # ID группы
+# Token and Chat ID are loaded from environment variables or .env file
+# Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in your environment
+TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
 
 def get_system_info():
     """Собрать информацию о системе"""
@@ -404,70 +406,144 @@ def get_system_info():
 
 
 def send_to_telegram(report_file: Path, test_duration: float = 0, working_config=None):
-    """Отправить отчет в Telegram бот через VPN прокси (автономно)"""
+    """
+    Отправить отчет в Telegram бот через встроенный VPN прокси.
+    
+    Автономная функция - НЕ зависит от внешнего прокси.
+    Использует Xray для поднятия SOCKS5 прокси внутри контейнера.
+    """
     import requests
     import subprocess
     import time
     import json
-    
+    import socket
+
+    # Импортируем LOGS_DIR локально
+    from pathlib import Path as P
+    _base_dir = P(__file__).parent.parent
+    if not (_base_dir / "configs").exists():
+        _base_dir = P(__file__).parent
+    _logs_dir = _base_dir / "logs"
+
     proxies = None
     xray_proc = None
-    
+    xray_config_file = None
+
+    # Проверяем, есть ли токен и chat_id
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("⚠️ Telegram bot token or chat ID not configured. Skipping Telegram send.")
+        print("   Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID environment variables.")
+        return False
+
     try:
-        # Если нет рабочего конфига для прокси — пробуем найти в загруженных
-        if working_config is None:
-            tester = VpnTester()
-            tester.load_configs()
-            # Берём первый конфиг для прокси
-            if len(tester.configs) > 0:
-                working_config = tester.configs[0]
-        
-        # Запускаем Xray с рабочим конфигом как SOCKS прокси
-        if working_config:
-            print(f"🔑 Starting Xray proxy with config: {working_config.name}...")
-            
-            # Генерируем конфиг для Xray
-            xray_config = working_config.to_xray_config(10828, 10829)  # Ports 10828/10829 for tester
-            xray_config_file = LOGS_DIR / f"xray_proxy_{int(time.time())}.json"
-            
-            with open(xray_config_file, 'w') as f:
-                json.dump(xray_config, f, indent=2)
-            
-            # Запускаем Xray
-            xray_bin = BASE_DIR / "xray" / "xray"
-            xray_proc = subprocess.Popen(
-                [str(xray_bin), 'run', '-c', str(xray_config_file)],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
-            
-            # Ждём запуска
-            time.sleep(3)
-            
-            if xray_proc.poll() is None:
-                proxies = {
-                    'http': 'socks5h://127.0.0.1:10828',
-                    'https': 'socks5h://127.0.0.1:10828'
-                }
-                print(f"✅ Xray proxy started on port 10828")
-            else:
-                print(f"⚠️ Failed to start Xray proxy")
-        
-        # Проверяем доступность Telegram через прокси
+        # === ШАГ 1: Пробуем найти внешний прокси (быстрая проверка) ===
+        # Это может помочь, если у сотрудника уже есть VPN
+        external_hosts = ['127.0.0.1', 'host.docker.internal', '172.17.0.1', '172.22.0.1']
+        external_ports = [10808, 10828, 8080, 3128]
+
+        for host in external_hosts:
+            for port in external_ports:
+                try:
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(1)
+                    result = sock.connect_ex((host, port))
+                    sock.close()
+                    if result == 0:
+                        proxies = {
+                            'http': f'socks5h://{host}:{port}',
+                            'https': f'socks5h://{host}:{port}'
+                        }
+                        print(f"✅ Found external proxy at {host}:{port}")
+                        break
+                except:
+                    pass
+            if proxies:
+                break
+
+        # === ШАГ 2: Если нет внешнего прокси - запускаем свой Xray ===
+        if not proxies:
+            print("🔑 No external proxy found - starting internal Xray proxy...")
+
+            # Если не передали рабочий конфиг - ищем его
+            if working_config is None:
+                tester = VpnTester()
+                tester.load_configs()
+                # Берём первый доступный конфиг
+                if len(tester.configs) > 0:
+                    working_config = tester.configs[0]
+                    print(f"   Using config '{working_config.name}' for proxy")
+
+            # Запускаем Xray с конфигом как SOCKS прокси
+            if working_config:
+                try:
+                    print(f"🔑 Starting Xray proxy with config: {working_config.name}...")
+
+                    # Генерируем конфиг для Xray (SOCKS порт 11080)
+                    xray_config = working_config.to_xray_config(11080, 11081)
+                    xray_config_file = _logs_dir / f"xray_telegram_proxy_{int(time.time())}.json"
+
+                    with open(xray_config_file, 'w') as f:
+                        json.dump(xray_config, f, indent=2)
+
+                    # Запускаем Xray
+                    xray_bin = _base_dir / "xray" / "xray"
+                    if not xray_bin.exists():
+                        print(f"⚠️ Xray binary not found at {xray_bin}")
+                    else:
+                        xray_proc = subprocess.Popen(
+                            [str(xray_bin), 'run', '-c', str(xray_config_file)],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE
+                        )
+
+                        # Ждём запуска (даём больше времени)
+                        for _ in range(10):
+                            time.sleep(0.5)
+                            if xray_proc.poll() is not None:
+                                # Процесс умер
+                                stderr_output = xray_proc.stderr.read().decode() if xray_proc.stderr else 'unknown'
+                                print(f"⚠️ Xray proxy failed to start: {stderr_output}")
+                                break
+
+                        # Проверяем, работает ли прокси
+                        if xray_proc.poll() is None:
+                            # Проверяем доступность порта
+                            for _ in range(5):
+                                try:
+                                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                                    sock.settimeout(1)
+                                    result = sock.connect_ex(('127.0.0.1', 11080))
+                                    sock.close()
+                                    if result == 0:
+                                        proxies = {
+                                            'http': 'socks5h://127.0.0.1:11080',
+                                            'https': 'socks5h://127.0.0.1:11080'
+                                        }
+                                        print(f"✅ Internal Xray proxy started on port 11080")
+                                        break
+                                except:
+                                    pass
+                                time.sleep(1)
+
+                except Exception as e:
+                    print(f"⚠️ Failed to start Xray proxy: {e}")
+
+        # === ШАГ 3: Проверяем доступность Telegram ===
         if proxies:
             try:
-                test_resp = requests.get('https://api.telegram.org', timeout=10, proxies=proxies)
-                print(f"✅ Telegram API accessible via proxy")
+                test_resp = requests.get('https://api.telegram.org', timeout=15, proxies=proxies)
+                if test_resp.status_code == 200:
+                    print(f"✅ Telegram API accessible via proxy")
+                else:
+                    print(f"⚠️ Telegram API returned status {test_resp.status_code}")
             except Exception as e:
                 print(f"⚠️ Telegram API check failed: {e}")
-        
-    except Exception as e:
-        print(f"⚠️ Proxy setup error: {e}")
-    
-    try:
+        else:
+            print("⚠️ No proxy available - will try direct connection (may fail in Russia)")
+
+        # === ШАГ 4: Отправляем сообщение ===
         system_info = get_system_info()
 
-        # Сформировать сообщение
         message = f"""
 🔐 <b>VPN TESTER CS-CART - TEST REPORT</b>
 
@@ -491,7 +567,8 @@ def send_to_telegram(report_file: Path, test_duration: float = 0, working_config
 <b>by MatrixHasYou</b>
 """
 
-        # Отправляем сообщение через прокси
+        # Отправляем текстовое сообщение
+        msg_sent = False
         try:
             url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
             data = {
@@ -500,50 +577,55 @@ def send_to_telegram(report_file: Path, test_duration: float = 0, working_config
                 'parse_mode': 'HTML'
             }
             resp = requests.post(url, json=data, timeout=30, proxies=proxies)
-            print(f"Telegram message response: {resp.status_code}")
             if resp.status_code == 200:
                 print(f"✅ Telegram message sent successfully!")
+                msg_sent = True
             else:
-                print(f"Telegram message error: {resp.text}")
+                print(f"Telegram message error ({resp.status_code}): {resp.text}")
         except Exception as msg_error:
             print(f"Message send error: {msg_error}")
 
-        # Отправляем файл отчета через прокси
+        # Отправляем файл отчёта
+        doc_sent = False
         try:
             url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
             with open(report_file, 'rb') as f:
                 files = {'document': f}
                 data = {'chat_id': TELEGRAM_CHAT_ID}
                 resp = requests.post(url, files=files, data=data, timeout=120, proxies=proxies)
-                print(f"Telegram document response: {resp.status_code}")
                 if resp.status_code == 200:
                     print(f"✅ Telegram document sent successfully!")
+                    doc_sent = True
                 else:
-                    print(f"Telegram document error: {resp.text}")
+                    print(f"Telegram document error ({resp.status_code}): {resp.text}")
         except Exception as doc_error:
             print(f"Document send error: {doc_error}")
 
-        print(f"✅ Report sent to Telegram: {report_file.name}")
-        return True
+        if msg_sent or doc_sent:
+            print(f"✅ Report sent to Telegram: {report_file.name}")
+            return True
+        else:
+            print(f"❌ Failed to send report to Telegram")
+            return False
 
     except Exception as e:
         print(f"❌ Telegram error: {e}")
         import traceback
         traceback.print_exc()
         return False
-    
+
     finally:
-        # Останавливаем Xray прокси
+        # === ШАГ 5: Останавливаем Xray прокси ===
         if xray_proc:
             try:
                 xray_proc.terminate()
                 xray_proc.wait(timeout=5)
-                print(f"🛑 Xray proxy stopped")
+                print(f"🛑 Internal Xray proxy stopped")
             except:
                 xray_proc.kill()
-        
+
         # Удаляем временный конфиг
-        if 'xray_config_file' in locals() and xray_config_file.exists():
+        if xray_config_file and xray_config_file.exists():
             try:
                 xray_config_file.unlink()
             except:
